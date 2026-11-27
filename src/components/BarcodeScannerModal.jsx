@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Camera, X, Keyboard, CheckCircle2, AlertTriangle, Loader2, Aperture, ImagePlus } from 'lucide-react';
+import { Camera, X, Keyboard, CheckCircle2, AlertTriangle, Loader2, Aperture, ImagePlus, Flashlight, Focus, ZoomIn } from 'lucide-react';
 
 const SUPPORTED_FORMATS = [
   Html5QrcodeSupportedFormats.EAN_13,
@@ -35,16 +35,21 @@ function playScanBeep() {
 export function BarcodeScannerModal({ title, onDetected, onClose }) {
   const containerId = 'kiziy-barcode-reader';
   const scannerRef = useRef(null);
+  const trackRef = useRef(null);
   const mountedRef = useRef(true);
   const onDetectedRef = useRef(onDetected);
   const onCloseRef = useRef(onClose);
   onDetectedRef.current = onDetected;
   onCloseRef.current = onClose;
 
-  const [scanStatus, setScanStatus] = useState('STARTING'); // STARTING | SCANNING | DECODING | SLOW_HINT | SUCCESS | ERROR
-  const [statusMessage, setStatusMessage] = useState('Mengaktifkan kamera...');
+  const [scanStatus, setScanStatus] = useState('STARTING');
+  const [statusMessage, setStatusMessage] = useState('Mengaktifkan kamera & autofokus...');
   const [detectedCode, setDetectedCode] = useState('');
   const [manualCode, setManualCode] = useState('');
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [zoomCaps, setZoomCaps] = useState(null);
+  const [zoomVal, setZoomVal] = useState(1);
 
   const completeScan = (rawCode) => {
     if (!mountedRef.current || !rawCode) return;
@@ -65,12 +70,42 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
     setTimeout(() => {
       onDetectedRef.current(cleanCode);
       onCloseRef.current();
-    }, 600);
+    }, 550);
+  };
+
+  const applyCameraFocusAndCapabilities = async () => {
+    try {
+      const videoEl = document.querySelector(`#${containerId} video`);
+      if (!videoEl || !videoEl.srcObject) return;
+      const tracks = videoEl.srcObject.getVideoTracks();
+      if (!tracks || tracks.length === 0) return;
+
+      const track = tracks[0];
+      trackRef.current = track;
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+
+      // Aktifkan continuous autofocus jika didukung hardware kamera
+      if (caps.focusMode && caps.focusMode.includes('continuous')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      }
+      if (caps.torch) {
+        setTorchSupported(true);
+      }
+      if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+        const defaultZoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1.5));
+        setZoomCaps({ min: caps.zoom.min, max: caps.zoom.max });
+        setZoomVal(defaultZoom);
+        await track.applyConstraints({ advanced: [{ zoom: defaultZoom }] });
+      }
+    } catch (capErr) {
+      console.debug('Camera capability constraint skipped:', capErr?.message);
+    }
   };
 
   useEffect(() => {
     mountedRef.current = true;
     let hintTimer = null;
+    let nativeLoop = null;
 
     const scanner = new Html5Qrcode(containerId, {
       formatsToSupport: SUPPORTED_FORMATS,
@@ -79,19 +114,14 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
     });
     scannerRef.current = scanner;
 
+    // Area scan lebar (92% lebar) agar quiet-zone barcode 1D tidak terpotong
     const scanConfig = {
-      fps: 15,
+      fps: 24,
       qrbox: (viewW, viewH) => ({
-        width: Math.min(340, Math.floor(viewW * 0.88)),
-        height: Math.min(180, Math.floor(viewH * 0.55))
+        width: Math.floor(viewW * 0.92),
+        height: Math.min(200, Math.floor(viewH * 0.62))
       }),
-      aspectRatio: 1.777778,
-      videoConstraints: {
-        facingMode: 'environment',
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        focusMode: 'continuous'
-      }
+      aspectRatio: 1.777778
     };
 
     async function startCamera() {
@@ -103,19 +133,46 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
         if (!cameras || cameras.length === 0) {
           throw new Error('Tidak ada kamera terdeteksi.');
         }
-        await scanner.start(cameras[0].id, scanConfig, completeScan, () => {});
+        const backCam = cameras.find((c) => /back|rear|environment/i.test(c.label)) || cameras[0];
+        await scanner.start(backCam.id, scanConfig, completeScan, () => {});
       }
 
-      if (mountedRef.current) {
-        setScanStatus('SCANNING');
-        setStatusMessage('Arahkan ke barcode, atau tekan "Tangkap Foto" agar lebih akurat.');
-        hintTimer = setTimeout(() => {
-          if (mountedRef.current) {
-            setScanStatus('SLOW_HINT');
-            setStatusMessage('Tips: Tekan "Tangkap Foto" atau "Kamera HP (HD)" untuk fokus maksimal.');
-          }
-        }, 8000);
+      if (!mountedRef.current) return;
+      await applyCameraFocusAndCapabilities();
+
+      setScanStatus('SCANNING');
+      setStatusMessage('Autofokus aktif — Sejajarkan barcode secara mendatar di kotak.');
+
+      // Parallel native BarcodeDetector pass (jika browser mendukung) untuk deteksi 1D super cepat
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new window.BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code']
+          });
+          nativeLoop = setInterval(async () => {
+            if (!mountedRef.current) return;
+            const videoEl = document.querySelector(`#${containerId} video`);
+            if (!videoEl || videoEl.readyState < 2) return;
+            try {
+              const codes = await detector.detect(videoEl);
+              if (codes && codes.length > 0 && codes[0].rawValue) {
+                completeScan(codes[0].rawValue);
+              }
+            } catch (detErr) {
+              console.debug('Native detector tick:', detErr?.message);
+            }
+          }, 250);
+        } catch (initDetErr) {
+          console.debug('BarcodeDetector init skipped:', initDetErr?.message);
+        }
       }
+
+      hintTimer = setTimeout(() => {
+        if (mountedRef.current) {
+          setScanStatus('SLOW_HINT');
+          setStatusMessage('Tips: Ketuk layar kamera untuk fokus ulang, nyalakan Flash, atau tekan "Tangkap Foto".');
+        }
+      }, 8000);
     }
 
     startCamera().catch((err) => {
@@ -128,6 +185,7 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
     return () => {
       mountedRef.current = false;
       clearTimeout(hintTimer);
+      clearInterval(nativeLoop);
       if (scannerRef.current) {
         try {
           if (scannerRef.current.isScanning) {
@@ -150,9 +208,46 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
     };
   }, []);
 
-  /**
-   * Tangkap frame video saat ini lalu baca barcode dari gambar tersebut
-   */
+  const handleRefocus = async () => {
+    if (!trackRef.current) return;
+    try {
+      const caps = trackRef.current.getCapabilities ? trackRef.current.getCapabilities() : {};
+      if (caps.focusMode && caps.focusMode.includes('single-shot')) {
+        await trackRef.current.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+      } else if (caps.focusMode && caps.focusMode.includes('continuous')) {
+        await trackRef.current.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      }
+      setStatusMessage('Memfokuskan ulang kamera...');
+    } catch (err) {
+      console.debug('Refocus tidak didukung:', err?.message);
+    }
+  };
+
+  const handleToggleTorch = async () => {
+    if (!trackRef.current || !torchSupported) return;
+    try {
+      const next = !torchOn;
+      await trackRef.current.applyConstraints({ advanced: [{ torch: next }] });
+      setTorchOn(next);
+    } catch (err) {
+      console.debug('Torch toggle error:', err?.message);
+    }
+  };
+
+  const handleZoomCycle = async () => {
+    if (!trackRef.current || !zoomCaps) return;
+    try {
+      const steps = [1, 1.5, 2].filter((z) => z >= zoomCaps.min && z <= zoomCaps.max);
+      if (steps.length === 0) return;
+      const currentIdx = steps.findIndex((s) => Math.abs(s - zoomVal) < 0.2);
+      const nextZoom = steps[(currentIdx + 1) % steps.length];
+      await trackRef.current.applyConstraints({ advanced: [{ zoom: nextZoom }] });
+      setZoomVal(nextZoom);
+    } catch (err) {
+      console.debug('Zoom error:', err?.message);
+    }
+  };
+
   const handleCaptureFrame = async () => {
     const videoEl = document.querySelector(`#${containerId} video`);
     if (!videoEl || videoEl.readyState < 2) {
@@ -169,7 +264,7 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
       canvas.width = videoEl.videoWidth || 1280;
       canvas.height = videoEl.videoHeight || 720;
       const ctx = canvas.getContext('2d');
-      ctx.filter = 'contrast(1.35) grayscale(1)';
+      ctx.filter = 'contrast(1.4) grayscale(1)';
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
 
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
@@ -183,14 +278,11 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
       completeScan(result);
     } catch (err) {
       setScanStatus('SLOW_HINT');
-      setStatusMessage('Barcode tidak terbaca dari tangkapan gambar. Dekatkan kamera atau gunakan "Kamera HP (HD)".');
+      setStatusMessage('Barcode tidak terbaca dari tangkapan gambar. Coba "Kamera HP (HD)".');
       console.debug('Capture decode failed:', err?.message);
     }
   };
 
-  /**
-   * Baca barcode dari foto kamera bawaan HP (autofokus & resolusi penuh)
-   */
   const handlePhotoFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -245,7 +337,25 @@ export function BarcodeScannerModal({ title, onDetected, onClose }) {
         </div>
 
         <div className="p-4 space-y-3">
-          <div id={containerId} className="w-full min-h-[220px] bg-slate-900 rounded-xl overflow-hidden" />
+          <div className="relative">
+            <div id={containerId} onClick={handleRefocus} className="w-full min-h-[220px] bg-slate-900 rounded-xl overflow-hidden cursor-pointer" />
+            <div className="absolute top-2 right-2 flex gap-1.5 z-10">
+              <button type="button" onClick={handleRefocus} className="p-2 rounded-lg bg-slate-900/75 text-white hover:bg-slate-800 text-xs flex items-center gap-1" title="Fokus Ulang">
+                <Focus className="w-3.5 h-3.5" />
+              </button>
+              {zoomCaps && (
+                <button type="button" onClick={handleZoomCycle} className="px-2 py-1.5 rounded-lg bg-slate-900/75 text-white hover:bg-slate-800 text-[11px] font-bold flex items-center gap-1" title="Zoom Kamera">
+                  <ZoomIn className="w-3.5 h-3.5" />
+                  <span>{zoomVal}x</span>
+                </button>
+              )}
+              {torchSupported && (
+                <button type="button" onClick={handleToggleTorch} className={torchOn ? 'p-2 rounded-lg bg-amber-500 text-slate-950' : 'p-2 rounded-lg bg-slate-900/75 text-white'} title="Lampu Flash">
+                  <Flashlight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
 
           <div className={statusBoxClass}>
             {scanStatus === 'SUCCESS' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
