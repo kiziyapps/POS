@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { callGasApi } from '../services/gasClient.mjs';
 import { offlineDb } from '../services/offlineDb.mjs';
 import { APP_CONSTANTS } from '../config/env.mjs';
@@ -20,14 +20,74 @@ export function AuthProvider({ children }) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const syncLockRef = useRef(false);
 
   const refreshQueueCount = useCallback(async () => {
     const queue = await offlineDb.getOfflineQueue();
     setOfflineQueueCount(queue.length);
+    return queue;
   }, []);
 
+  /**
+   * Background Sync Worker: memproses antrian offline_tx_queue tanpa memblokir UI
+   */
+  const syncOfflineQueueNow = useCallback(async () => {
+    if (syncLockRef.current || !navigator.onLine || !session?.token) return { synced: 0 };
+    syncLockRef.current = true;
+    setSyncing(true);
+    let syncedCount = 0;
+
+    try {
+      const queue = await offlineDb.getOfflineQueue();
+      queue.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+
+      for (const item of queue) {
+        await callGasApi('pos.checkout', item, session.token);
+        await offlineDb.removeOfflineTx(item.client_tx_uuid);
+        syncedCount += 1;
+        await refreshQueueCount();
+      }
+
+      if (syncedCount > 0) {
+        const fresh = await callGasApi('system.bootstrap', {}, session.token);
+        if (fresh) {
+          setBootstrapData(fresh);
+          await offlineDb.saveBootstrapData(fresh);
+        }
+      }
+    } catch (err) {
+      console.warn('Background sync tertunda:', err.message);
+    } finally {
+      syncLockRef.current = false;
+      setSyncing(false);
+      await refreshQueueCount();
+    }
+    return { synced: syncedCount };
+  }, [session?.token, refreshQueueCount]);
+
+  /**
+   * Optimistic Checkout (0ms): simpan lokal dulu, lalu sync di background
+   */
+  const enqueueAndSyncTx = useCallback(async (txPayload) => {
+    await offlineDb.enqueueOfflineTx(txPayload);
+    const updatedBoot = await offlineDb.applyOptimisticSale(txPayload);
+    if (updatedBoot) setBootstrapData(updatedBoot);
+    await refreshQueueCount();
+
+    // Jalankan sync di background tanpa await agar UI langsung menampilkan struk
+    if (navigator.onLine && session?.token) {
+      setTimeout(() => {
+        syncOfflineQueueNow();
+      }, 50);
+    }
+    return txPayload;
+  }, [session?.token, refreshQueueCount, syncOfflineQueueNow]);
+
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineQueueNow();
+    };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -36,7 +96,16 @@ export function AuthProvider({ children }) {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [refreshQueueCount]);
+  }, [refreshQueueCount, syncOfflineQueueNow]);
+
+  // Auto-sync periodik tiap 30 detik jika masih ada antrian
+  useEffect(() => {
+    if (!session?.token || offlineQueueCount === 0) return undefined;
+    const timer = setInterval(() => {
+      if (navigator.onLine) syncOfflineQueueNow();
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [session?.token, offlineQueueCount, syncOfflineQueueNow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +118,7 @@ export function AuthProvider({ children }) {
 
       if (session?.token && navigator.onLine) {
         try {
+          await syncOfflineQueueNow();
           setSyncing(true);
           const fresh = await callGasApi('system.bootstrap', {}, session.token);
           if (!cancelled && fresh) {
@@ -64,7 +134,7 @@ export function AuthProvider({ children }) {
     }
     initLocalData();
     return () => { cancelled = true; };
-  }, [session?.token]);
+  }, [session?.token, syncOfflineQueueNow]);
 
   useEffect(() => {
     if (!session?.token) return undefined;
@@ -143,7 +213,9 @@ export function AuthProvider({ children }) {
     openShift,
     closeShift,
     hasPermission,
-    refreshQueueCount
+    refreshQueueCount,
+    enqueueAndSyncTx,
+    syncOfflineQueueNow
   };
 
   return (

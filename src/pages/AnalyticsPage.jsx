@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart3, Mail, MessageCircle, TrendingUp, DollarSign, Receipt, AlertCircle } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { callGasApi } from '../services/gasClient.mjs';
+import { offlineDb } from '../services/offlineDb.mjs';
 import { buildDailyReportWaUrl } from '../services/whatsapp.mjs';
 import { formatRupiah } from '../utils/pricing.mjs';
 
@@ -17,6 +18,20 @@ export function AnalyticsPage() {
   const [sendingEmail, setSendingEmail] = useState(false);
 
   const loadSummary = useCallback(async () => {
+    // 1. Instant 0ms dari IndexedDB (SWR, termasuk optimistic update)
+    const cached = await offlineDb.getSummaryRows();
+    if (cached && cached.length > 0) {
+      const outletFilter = user?.outlet_id || 'ALL';
+      const filtered = cached.filter((r) => {
+        const d = String(r.date || '');
+        const matchDate = (!startDate || d >= startDate) && (!endDate || d <= endDate);
+        const matchOutlet = outletFilter === 'ALL' || r.outlet_id === outletFilter;
+        return matchDate && matchOutlet;
+      });
+      setRows(filtered);
+    }
+
+    // 2. Revalidate di background dari GAS
     if (!isOnline || !session?.token) return;
     setLoading(true);
     try {
@@ -25,7 +40,9 @@ export function AnalyticsPage() {
         end_date: endDate,
         outlet_id: user?.outlet_id || 'ALL'
       }, session.token);
-      setRows(data || []);
+      const safeRows = data || [];
+      setRows(safeRows);
+      await offlineDb.saveSummaryRows(safeRows);
     } catch (err) {
       console.warn('Gagal memuat Daily_Summary:', err.message);
     } finally {

@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Printer, MessageCircle, CheckCircle2, AlertTriangle, Camera, ShoppingCart, X } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
-import { callGasApi, generateOfflineReceiptNo } from '../services/gasClient.mjs';
-import { offlineDb } from '../services/offlineDb.mjs';
+import { generateOfflineReceiptNo } from '../services/gasClient.mjs';
 import { buildInvoiceWaUrl } from '../services/whatsapp.mjs';
 import { getDeviceId } from '../config/env.mjs';
 import { formatRupiah, getDriveCdnUrl, resolveVariantPrice } from '../utils/pricing.mjs';
@@ -11,7 +10,7 @@ import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
 const HELD_CARTS_KEY = 'kiziy_held_carts';
 
 export function PosPage() {
-  const { session, user, bootstrapData, activeShift, isOnline, refreshQueueCount } = useAuth();
+  const { bootstrapData, activeShift, user, isOnline, enqueueAndSyncTx } = useAuth();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [cart, setCart] = useState([]);
@@ -189,46 +188,29 @@ export function PosPage() {
     };
 
     try {
-      if (isOnline && session?.token) {
-        const res = await callGasApi('pos.checkout', txPayload, session.token);
-        setReceiptModal({
-          tx: res.tx,
-          items: res.items || cart,
-          change: changeAmount,
-          email_result: res.email_result,
-          customer_phone: customerPhone.trim(),
-          offline_saved: false
-        });
-      } else {
-        await offlineDb.enqueueOfflineTx(txPayload);
-        await refreshQueueCount();
-        setReceiptModal({
-          tx: { ...txPayload, tx_id: txPayload.offline_receipt_no, sync_status: 'PENDING_OFFLINE' },
-          items: cart,
-          change: changeAmount,
-          email_result: { sent: false, fallback_wa: true, reason: 'OFFLINE_MODE' },
-          customer_phone: customerPhone.trim(),
-          offline_saved: true
-        });
-      }
+      await enqueueAndSyncTx(txPayload);
+      setReceiptModal({
+        tx: {
+          ...txPayload,
+          tx_id: txPayload.offline_receipt_no,
+          sync_status: isOnline ? 'QUEUED_BACKGROUND_SYNC' : 'PENDING_OFFLINE'
+        },
+        items: cart,
+        change: changeAmount,
+        email_result: {
+          sent: false,
+          fallback_wa: true,
+          reason: isOnline ? 'SYNCING_IN_BACKGROUND' : 'OFFLINE_MODE'
+        },
+        customer_phone: customerPhone.trim(),
+        offline_saved: true
+      });
       setCart([]);
       setCartDiscount(0);
       setCustomerEmail('');
       setCustomerPhone('');
       setMobileCartOpen(false);
       setPayments([{ method_id: paymentMethods[0]?.method_id || 'PM_CASH', amount: '' }]);
-    } catch (err) {
-      await offlineDb.enqueueOfflineTx(txPayload);
-      await refreshQueueCount();
-      setReceiptModal({
-        tx: { ...txPayload, tx_id: txPayload.offline_receipt_no, sync_status: 'PENDING_OFFLINE' },
-        items: cart,
-        change: changeAmount,
-        email_result: { sent: false, fallback_wa: true, reason: err.message },
-        customer_phone: customerPhone.trim(),
-        offline_saved: true
-      });
-      setCart([]);
     } finally {
       setProcessing(false);
     }

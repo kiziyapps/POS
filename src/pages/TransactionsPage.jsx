@@ -7,20 +7,30 @@ import { buildInvoiceWaUrl } from '../services/whatsapp.mjs';
 import { formatRupiah } from '../utils/pricing.mjs';
 
 export function TransactionsPage() {
-  const { session, isOnline, hasPermission, refreshQueueCount } = useAuth();
+  const { session, isOnline, hasPermission, syncOfflineQueueNow } = useAuth();
   const [txs, setTxs] = useState([]);
   const [offlineQueue, setOfflineQueue] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async () => {
-    const q = await offlineDb.getOfflineQueue();
+    // 1. Instant 0ms dari IndexedDB (SWR)
+    const [q, cachedTxs] = await Promise.all([
+      offlineDb.getOfflineQueue(),
+      offlineDb.getRecentTxs()
+    ]);
     setOfflineQueue(q);
+    if (cachedTxs && cachedTxs.length > 0) {
+      setTxs(cachedTxs);
+    }
 
+    // 2. Revalidate di background jika online
     if (isOnline && session?.token) {
       setLoading(true);
       try {
         const list = await callGasApi('pos.list_recent', { limit: 50 }, session.token);
-        setTxs(list || []);
+        const safeList = list || [];
+        setTxs(safeList);
+        await offlineDb.saveRecentTxs(safeList);
       } catch (err) {
         console.warn('Gagal memuat transaksi:', err.message);
       } finally {
@@ -37,14 +47,8 @@ export function TransactionsPage() {
     if (!isOnline || !session?.token) return;
     setLoading(true);
     try {
-      for (const item of offlineQueue) {
-        await callGasApi('pos.checkout', item, session.token);
-        await offlineDb.removeOfflineTx(item.client_tx_uuid);
-      }
-      await refreshQueueCount();
+      await syncOfflineQueueNow();
       await loadData();
-    } catch (err) {
-      alert('Sinkronisasi sebagian gagal: ' + err.message);
     } finally {
       setLoading(false);
     }

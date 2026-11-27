@@ -3,7 +3,7 @@ import { Wifi, WifiOff, RefreshCw, LogOut, Clock, Store, ShoppingCart, Package, 
 import { useAuth } from '../store/AuthContext.jsx';
 
 export function Navbar({ activeTab, onChangeTab, onOpenShiftModal }) {
-  const { user, activeShift, isOnline, offlineQueueCount, syncing, logout } = useAuth();
+  const { user, activeShift, isOnline, offlineQueueCount, syncing, logout, syncOfflineQueueNow } = useAuth();
   const hasOfflineQueue = offlineQueueCount > 0;
   const onlineBadgeClass = isOnline
     ? 'px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300'
@@ -74,9 +74,9 @@ export function Navbar({ activeTab, onChangeTab, onOpenShiftModal }) {
             {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{isOnline ? 'Online' : 'Offline'}</span>
             {hasOfflineQueue && (
-              <span className="px-1.5 py-0.5 bg-amber-500 text-slate-950 rounded-full font-bold text-[10px]">
-                {offlineQueueCount}
-              </span>
+              <button type="button" onClick={syncOfflineQueueNow} className="px-1.5 py-0.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full font-bold text-[10px]" title="Klik untuk sinkronisasi antrian">
+                {offlineQueueCount} Sync
+              </button>
             )}
           </div>
 
