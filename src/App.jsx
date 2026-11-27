@@ -23,7 +23,7 @@ function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 pb-20 lg:pb-6">
       <Navbar activeTab={activeTab} onChangeTab={setActiveTab} onOpenShiftModal={handleOpenShift} />
       {activeTab === 'POS' && <PosPage />}
       {activeTab === 'INVENTORY' && <InventoryPage />}

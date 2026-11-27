@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Printer, MessageCircle, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
+import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Printer, MessageCircle, CheckCircle2, AlertTriangle, Camera, ShoppingCart, X } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { callGasApi, generateOfflineReceiptNo } from '../services/gasClient.mjs';
 import { offlineDb } from '../services/offlineDb.mjs';
@@ -22,6 +22,7 @@ export function PosPage() {
   const [payments, setPayments] = useState([{ method_id: 'PM_CASH', amount: '' }]);
   const [processing, setProcessing] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [scanFeedback, setScanFeedback] = useState(null);
   const [receiptModal, setReceiptModal] = useState(null);
   const [heldCarts, setHeldCarts] = useState(() => {
@@ -126,6 +127,7 @@ export function PosPage() {
   };
 
   const subtotal = cart.reduce((sum, c) => sum + Number(c.line_total || 0), 0);
+  const totalCartQty = cart.reduce((sum, c) => sum + Number(c.qty || 0), 0);
   const discountVal = Math.min(subtotal, Number(cartDiscount || 0));
   const afterDiscount = Math.max(0, subtotal - discountVal);
   const taxTotal = applyTax ? Math.round(afterDiscount * 0.11) : 0;
@@ -213,6 +215,7 @@ export function PosPage() {
       setCartDiscount(0);
       setCustomerEmail('');
       setCustomerPhone('');
+      setMobileCartOpen(false);
       setPayments([{ method_id: paymentMethods[0]?.method_id || 'PM_CASH', amount: '' }]);
     } catch (err) {
       await offlineDb.enqueueOfflineTx(txPayload);
@@ -241,6 +244,8 @@ export function PosPage() {
   const handlePrintReceipt = () => window.print();
   const handleOpenScanner = () => setScannerOpen(true);
   const handleCloseScanner = () => setScannerOpen(false);
+  const handleOpenMobileCart = () => setMobileCartOpen(true);
+  const handleCloseMobileCart = () => setMobileCartOpen(false);
 
   const handleBarcodeDetected = (code) => {
     const exact = catalogItems.find((i) => String(i.barcode) === code || String(i.sku) === code);
@@ -354,19 +359,23 @@ export function PosPage() {
         )}
       </div>
 
-      {/* Kanan: Keranjang & Multi-Payment */}
-      <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between space-y-4">
+      {/* Kanan: Keranjang & Multi-Payment (Desktop: Kolom Kanan, Mobile/Tablet: Slide-Up Drawer) */}
+      <div className={mobileCartOpen ? 'fixed inset-0 z-40 bg-slate-950/60 flex items-end lg:static lg:bg-transparent lg:col-span-5 lg:block' : 'hidden lg:block lg:col-span-5'}>
+        <div className="bg-white w-full max-h-[88vh] lg:max-h-none overflow-y-auto rounded-t-2xl lg:rounded-2xl border border-slate-200 shadow-xl lg:shadow-sm p-4 flex flex-col justify-between space-y-4">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-            <h2 className="font-bold text-sm text-slate-900">Keranjang Belanja</h2>
+            <h2 className="font-bold text-sm text-slate-900">Keranjang Belanja ({totalCartQty})</h2>
             <div className="flex gap-2">
-              <button type="button" onClick={handleHoldCart} disabled={cart.length === 0} className="px-2.5 py-1 text-xs rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1 disabled:opacity-40">
+              <button type="button" onClick={handleHoldCart} disabled={cart.length === 0} className="px-2.5 py-1.5 text-xs rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center gap-1 disabled:opacity-40">
                 <PauseCircle className="w-3.5 h-3.5" />
                 <span>Hold</span>
               </button>
-              <button type="button" onClick={() => setCart([])} disabled={cart.length === 0} className="px-2.5 py-1 text-xs rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center gap-1 disabled:opacity-40">
+              <button type="button" onClick={() => setCart([])} disabled={cart.length === 0} className="px-2.5 py-1.5 text-xs rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center gap-1 disabled:opacity-40">
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Kosongkan</span>
+              </button>
+              <button type="button" onClick={handleCloseMobileCart} className="lg:hidden p-1.5 rounded-lg bg-slate-100 text-slate-600">
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -441,7 +450,21 @@ export function PosPage() {
             {processing ? 'Memproses Transaksi...' : 'Bayar & Cetak Struk'}
           </button>
         </div>
+        </div>
       </div>
+
+      {/* Sticky Floating Cart Bar untuk Smartphone & Tablet */}
+      {totalCartQty > 0 && !mobileCartOpen && (
+        <div className="lg:hidden fixed bottom-16 inset-x-3 z-20">
+          <button type="button" onClick={handleOpenMobileCart} className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl shadow-lg flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-semibold">
+              <ShoppingCart className="w-4 h-4" />
+              <span>{totalCartQty} Item di Keranjang</span>
+            </div>
+            <span className="font-extrabold text-sm">{formatRupiah(grandTotal)} • Bayar →</span>
+          </button>
+        </div>
+      )}
 
       {/* Modal Struk & Fallback WhatsApp */}
       {receiptModal && (

@@ -135,7 +135,7 @@ export function ProcurementPage() {
         </form>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
         <div className="px-4 py-3 border-b border-slate-200 font-bold text-xs text-slate-700 flex items-center gap-2">
           <ClipboardCheck className="w-4 h-4 text-emerald-600" />
           <span>Daftar Purchase Order Terbaru</span>
