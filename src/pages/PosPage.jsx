@@ -22,6 +22,7 @@ export function PosPage() {
   const [payments, setPayments] = useState([{ method_id: 'PM_CASH', amount: '' }]);
   const [processing, setProcessing] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanFeedback, setScanFeedback] = useState(null);
   const [receiptModal, setReceiptModal] = useState(null);
   const [heldCarts, setHeldCarts] = useState(() => {
     try {
@@ -246,9 +247,12 @@ export function PosPage() {
     if (exact) {
       addToCart(exact);
       setSearch('');
+      setScanFeedback({ ok: true, text: `Ditambahkan: ${exact.product_name} (${code})` });
     } else {
       setSearch(code);
+      setScanFeedback({ ok: false, text: `Barcode ${code} tidak ditemukan di katalog.` });
     }
+    setTimeout(() => setScanFeedback(null), 4000);
   };
 
   const categoryButtons = categories.map((cat) => {
@@ -325,6 +329,12 @@ export function PosPage() {
             </button>
           )}
         </div>
+
+        {scanFeedback && (
+          <div className={scanFeedback.ok ? 'p-2.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800' : 'p-2.5 rounded-xl text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-800'}>
+            {scanFeedback.text}
+          </div>
+        )}
 
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button type="button" onClick={handleSelectAllCat} className={selectedCategory === 'ALL' ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white' : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700'}>
