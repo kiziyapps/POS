@@ -210,3 +210,4 @@ Saat aplikasi siap disosialisasikan, dokumen ini akan diturunkan menjadi 3 paket
 | 26 Nov 2026 | Struktur Repository | Menggunakan **Monorepo** (`/frontend`, `/backend-gas`, `/docs`, `/.github/workflows`). | Menjaga sinkronisasi kontrak API FE–BE & dokumentasi dalam satu repo. |
 | 26 Nov 2026 | Granularitas File & Rollover | **Domain-Grouped** (gabungkan hanya tabel yang ditulis bersamaan dalam 1 transaksi; tabel lain terpisah). Rollover murni kapasitas **200.000 baris** (tanpa rollover bulanan). | Minimalkan latensi `openById()` saat checkout sekaligus menjaga efisiensi kapasitas. |
 | 26 Nov 2026 | Skema Database POS | Disepakati ~31 tabel POS Retail lengkap dalam `DATA_DICTIONARY.md`. | Fase 0 ditutup 100%, siap masuk Fase 1. |
+| 27 Nov 2026 | Scan Barcode Kamera | Penambahan `BarcodeScannerModal` (`html5-qrcode`) untuk input produk baru, pencarian/edit stok, penjualan kasir, dan input Purchase Order. | Mendukung kamera HP/laptop (iOS, Android, Desktop). |

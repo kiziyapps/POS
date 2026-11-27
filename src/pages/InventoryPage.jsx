@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
-import { PackagePlus, RefreshCw, Plus, Minus } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { PackagePlus, Plus, Minus, Camera, Search } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { callGasApi } from '../services/gasClient.mjs';
 import { offlineDb } from '../services/offlineDb.mjs';
 import { formatRupiah, getDriveCdnUrl } from '../utils/pricing.mjs';
+import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
 
 export function InventoryPage() {
   const { session, user, bootstrapData, isOnline } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState('');
+  const [scanTarget, setScanTarget] = useState(null); // 'NEW_PRODUCT' | 'SEARCH_EDIT'
   const [form, setForm] = useState({
     name: '', sku: '', barcode: '', variant_name: 'Standard',
     cogs: '', sell_price: '', initial_stock: '10', drive_image_id: ''
@@ -20,6 +23,30 @@ export function InventoryPage() {
   const outletId = user?.outlet_id === 'ALL' ? 'OUTLET_MAIN' : (user?.outlet_id || 'OUTLET_MAIN');
 
   const handleFieldChange = (field, val) => setForm((prev) => ({ ...prev, [field]: val }));
+  const handleSearchChange = (e) => setSearch(e.target.value);
+  const handleOpenScanNew = () => setScanTarget('NEW_PRODUCT');
+  const handleOpenScanSearch = () => setScanTarget('SEARCH_EDIT');
+  const handleCloseScanner = () => setScanTarget(null);
+
+  const handleBarcodeDetected = (code) => {
+    if (scanTarget === 'NEW_PRODUCT') {
+      handleFieldChange('barcode', code);
+      if (!form.sku) handleFieldChange('sku', code);
+    } else if (scanTarget === 'SEARCH_EDIT') {
+      setSearch(code);
+    }
+  };
+
+  const filteredVariants = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return variants;
+    return variants.filter((v) => {
+      const prod = products.find((p) => p.product_id === v.product_id) || {};
+      return String(prod.name || '').toLowerCase().includes(q) ||
+        String(v.sku || '').toLowerCase().includes(q) ||
+        String(v.barcode || '').toLowerCase().includes(q);
+    });
+  }, [variants, products, search]);
 
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -77,22 +104,38 @@ export function InventoryPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-900">Master Produk & Stok Retail</h2>
           <p className="text-xs text-slate-500">Outlet aktif: {outletId}</p>
         </div>
-        <button type="button" onClick={() => setShowAdd(!showAdd)} className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5">
-          <PackagePlus className="w-4 h-4" />
-          <span>Tambah Produk</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <input type="text" value={search} onChange={handleSearchChange} placeholder="Cari / scan barcode stok..." className="pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl" />
+          </div>
+          <button type="button" onClick={handleOpenScanSearch} className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5">
+            <Camera className="w-4 h-4" />
+            <span>Scan Cari</span>
+          </button>
+          <button type="button" onClick={() => setShowAdd(!showAdd)} className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5">
+            <PackagePlus className="w-4 h-4" />
+            <span>Tambah Produk</span>
+          </button>
+        </div>
       </div>
 
       {showAdd && (
         <form onSubmit={handleSaveProduct} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
           <input type="text" placeholder="Nama Produk" value={form.name} onChange={(e) => handleFieldChange('name', e.target.value)} className="px-3 py-2 text-xs border border-slate-300 rounded-lg" required />
           <input type="text" placeholder="SKU (misal: KML-01)" value={form.sku} onChange={(e) => handleFieldChange('sku', e.target.value)} className="px-3 py-2 text-xs border border-slate-300 rounded-lg" required />
-          <input type="text" placeholder="Barcode" value={form.barcode} onChange={(e) => handleFieldChange('barcode', e.target.value)} className="px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+          <div className="flex gap-1.5">
+            <input type="text" placeholder="Barcode" value={form.barcode} onChange={(e) => handleFieldChange('barcode', e.target.value)} className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg" />
+            <button type="button" onClick={handleOpenScanNew} className="px-2.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold flex items-center gap-1" title="Scan Barcode Kamera">
+              <Camera className="w-3.5 h-3.5" />
+              <span>Scan</span>
+            </button>
+          </div>
           <input type="text" placeholder="Varian (misal: Hitam / L)" value={form.variant_name} onChange={(e) => handleFieldChange('variant_name', e.target.value)} className="px-3 py-2 text-xs border border-slate-300 rounded-lg" />
           <input type="number" placeholder="HPP / COGS (Rp)" value={form.cogs} onChange={(e) => handleFieldChange('cogs', e.target.value)} className="px-3 py-2 text-xs border border-slate-300 rounded-lg" required />
           <input type="number" placeholder="Harga Jual (Rp)" value={form.sell_price} onChange={(e) => handleFieldChange('sell_price', e.target.value)} className="px-3 py-2 text-xs border border-slate-300 rounded-lg" required />
@@ -122,7 +165,7 @@ export function InventoryPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {variants.map((v) => {
+            {filteredVariants.map((v) => {
               const prod = products.find((p) => p.product_id === v.product_id) || {};
               const bal = stockBalances.find((s) => s.balance_key === `${outletId}|${v.variant_id}`);
               const qty = bal ? Number(bal.qty_on_hand || 0) : 0;
@@ -151,7 +194,7 @@ export function InventoryPage() {
                 </tr>
               );
             })}
-            {variants.length === 0 && (
+            {filteredVariants.length === 0 && (
               <tr>
                 <td colSpan="6" className="p-8 text-center text-slate-400">Belum ada data produk.</td>
               </tr>
@@ -159,6 +202,10 @@ export function InventoryPage() {
           </tbody>
         </table>
       </div>
+
+      {scanTarget && (
+        <BarcodeScannerModal title={scanTarget === 'NEW_PRODUCT' ? 'Scan Barcode Produk Baru' : 'Scan Barcode untuk Cari / Edit Stok'} onDetected={handleBarcodeDetected} onClose={handleCloseScanner} />
+      )}
     </div>
   );
 }

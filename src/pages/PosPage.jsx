@@ -1,11 +1,12 @@
 import React, { useState, useMemo } from 'react';
-import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Printer, MessageCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Printer, MessageCircle, CheckCircle2, AlertTriangle, Camera } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { callGasApi, generateOfflineReceiptNo } from '../services/gasClient.mjs';
 import { offlineDb } from '../services/offlineDb.mjs';
 import { buildInvoiceWaUrl } from '../services/whatsapp.mjs';
 import { getDeviceId } from '../config/env.mjs';
 import { formatRupiah, getDriveCdnUrl, resolveVariantPrice } from '../utils/pricing.mjs';
+import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
 
 const HELD_CARTS_KEY = 'kiziy_held_carts';
 
@@ -20,6 +21,7 @@ export function PosPage() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [payments, setPayments] = useState([{ method_id: 'PM_CASH', amount: '' }]);
   const [processing, setProcessing] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [receiptModal, setReceiptModal] = useState(null);
   const [heldCarts, setHeldCarts] = useState(() => {
     try {
@@ -236,6 +238,18 @@ export function PosPage() {
   const handlePhoneInput = (e) => setCustomerPhone(e.target.value);
   const handleCloseReceipt = () => setReceiptModal(null);
   const handlePrintReceipt = () => window.print();
+  const handleOpenScanner = () => setScannerOpen(true);
+  const handleCloseScanner = () => setScannerOpen(false);
+
+  const handleBarcodeDetected = (code) => {
+    const exact = catalogItems.find((i) => String(i.barcode) === code || String(i.sku) === code);
+    if (exact) {
+      addToCart(exact);
+      setSearch('');
+    } else {
+      setSearch(code);
+    }
+  };
 
   const categoryButtons = categories.map((cat) => {
     const isSelected = selectedCategory === cat.category_id;
@@ -300,6 +314,10 @@ export function PosPage() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input type="text" value={search} onChange={handleSearchInput} onKeyDown={handleSearchKeyDown} placeholder="Cari nama produk, SKU, atau scan barcode lalu tekan Enter..." className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
+          <button type="button" onClick={handleOpenScanner} className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5">
+            <Camera className="w-4 h-4" />
+            <span>Scan</span>
+          </button>
           {heldCarts.length > 0 && (
             <button type="button" onClick={() => handleResumeHeld(heldCarts[0].id)} className="px-3 py-2 bg-amber-100 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-1">
               <PlayCircle className="w-4 h-4" />
@@ -475,6 +493,10 @@ export function PosPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {scannerOpen && (
+        <BarcodeScannerModal title="Scan Barcode Penjualan" onDetected={handleBarcodeDetected} onClose={handleCloseScanner} />
       )}
     </div>
   );
