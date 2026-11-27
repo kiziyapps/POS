@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { Truck, ClipboardCheck, Wallet, Camera } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { callGasApi } from '../services/gasClient.mjs';
 import { formatRupiah } from '../utils/pricing.mjs';
-import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
+
+const BarcodeScannerModal = lazy(() => import('../components/BarcodeScannerModal.jsx').then((m) => ({ default: m.BarcodeScannerModal })));
 
 export function ProcurementPage() {
   const { session, isOnline, bootstrapData, activeShift } = useAuth();
@@ -176,7 +177,9 @@ export function ProcurementPage() {
       </div>
 
       {scannerOpen && (
-        <BarcodeScannerModal title="Scan Barcode untuk Purchase Order" onDetected={handleBarcodeDetected} onClose={handleCloseScanner} />
+        <Suspense fallback={null}>
+          <BarcodeScannerModal title="Scan Barcode untuk Purchase Order" onDetected={handleBarcodeDetected} onClose={handleCloseScanner} />
+        </Suspense>
       )}
     </div>
   );

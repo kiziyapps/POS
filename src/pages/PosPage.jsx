@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, lazy, Suspense } from 'react';
 import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Printer, MessageCircle, CheckCircle2, AlertTriangle, Camera, ShoppingCart, X } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { generateOfflineReceiptNo } from '../services/gasClient.mjs';
@@ -6,7 +6,8 @@ import { buildInvoiceWaUrl } from '../services/whatsapp.mjs';
 import { printBluetoothEscPos, printBrowserThermal } from '../services/thermalPrinter.mjs';
 import { getDeviceId } from '../config/env.mjs';
 import { formatRupiah, getDriveCdnUrl, resolveVariantPrice } from '../utils/pricing.mjs';
-import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
+
+const BarcodeScannerModal = lazy(() => import('../components/BarcodeScannerModal.jsx').then((m) => ({ default: m.BarcodeScannerModal })));
 
 const HELD_CARTS_KEY = 'kiziy_held_carts';
 
@@ -227,134 +228,134 @@ export function PosPage() {
   const handlePrintThermal = () => {
     if (receiptModal) printBrowserThermal(receiptModal);
   };
-  const handlePrintBluetooth = async () => {
-    if (!receiptModal) return;
-    try {
-      await printBluetoothEscPos(receiptModal);
-    } catch (err) {
-      alert(err.message);
-    }
-  };
-  const handleOpenScanner = () => setScannerOpen(true);
-  const handleCloseScanner = () => setScannerOpen(false);
-  const handleOpenMobileCart = () => setMobileCartOpen(true);
-  const handleCloseMobileCart = () => setMobileCartOpen(false);
+const handlePrintBluetooth = async () => {
+  if (!receiptModal) return;
+  try {
+    await printBluetoothEscPos(receiptModal);
+  } catch (err) {
+    alert(err.message);
+  }
+};
+const handleOpenScanner = () => setScannerOpen(true);
+const handleCloseScanner = () => setScannerOpen(false);
+const handleOpenMobileCart = () => setMobileCartOpen(true);
+const handleCloseMobileCart = () => setMobileCartOpen(false);
 
-  const handleBarcodeDetected = (code) => {
-    const exact = catalogItems.find((i) => String(i.barcode) === code || String(i.sku) === code);
-    if (exact) {
-      addToCart(exact);
-      setSearch('');
-      setScanFeedback({ ok: true, text: `Ditambahkan: ${exact.product_name} (${code})` });
-    } else {
-      setSearch(code);
-      setScanFeedback({ ok: false, text: `Barcode ${code} tidak ditemukan di katalog.` });
-    }
-    setTimeout(() => setScanFeedback(null), 4000);
-  };
+const handleBarcodeDetected = (code) => {
+  const exact = catalogItems.find((i) => String(i.barcode) === code || String(i.sku) === code);
+  if (exact) {
+    addToCart(exact);
+    setSearch('');
+    setScanFeedback({ ok: true, text: `Ditambahkan: ${exact.product_name} (${code})` });
+  } else {
+    setSearch(code);
+    setScanFeedback({ ok: false, text: `Barcode ${code} tidak ditemukan di katalog.` });
+  }
+  setTimeout(() => setScanFeedback(null), 4000);
+};
 
-  const categoryButtons = categories.map((cat) => {
-    const isSelected = selectedCategory === cat.category_id;
-    const btnCls = isSelected
-      ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white'
-      : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700';
-    return (
-      <button key={cat.category_id} type="button" onClick={() => setSelectedCategory(cat.category_id)} className={btnCls}>
-        {cat.name}
-      </button>
-    );
-  });
-
-  const productCards = filteredItems.map((item) => {
-    const imgUrl = getDriveCdnUrl(item.drive_image_id, 300);
-    return (
-      <button key={item.variant_id} type="button" onClick={() => addToCart(item)} className="bg-white border border-slate-200 hover:border-brand-500 rounded-xl p-3 text-left transition shadow-sm flex flex-col justify-between">
-        <div>
-          {imgUrl ? (
-            <img src={imgUrl} alt={item.product_name} className="w-full h-24 object-cover rounded-lg mb-2 bg-slate-100" />
-          ) : (
-            <div className="w-full h-24 rounded-lg mb-2 bg-slate-100 flex items-center justify-center text-slate-400">
-              <ShoppingBag className="w-7 h-7" />
-            </div>
-          )}
-          <p className="font-semibold text-xs text-slate-900 line-clamp-2">{item.product_name}</p>
-          <p className="text-[11px] text-slate-500">{item.variant_name} • {item.sku}</p>
-        </div>
-        <div className="mt-2 flex items-center justify-between">
-          <span className="font-bold text-xs text-brand-600">{formatRupiah(item.sell_price)}</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Stok: {item.stock_qty}</span>
-        </div>
-      </button>
-    );
-  });
-
-  const cartRows = cart.map((c) => (
-    <div key={c.variant_id} className="flex items-center justify-between gap-2 py-2 border-b border-slate-100">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-slate-900 truncate">{c.product_name_snapshot}</p>
-        <p className="text-[11px] text-slate-500">{formatRupiah(c.unit_price)} x {c.qty}</p>
-      </div>
-      <div className="flex items-center gap-1">
-        <button type="button" onClick={() => updateCartQty(c.variant_id, -1)} className="p-1 rounded bg-slate-100 hover:bg-slate-200">
-          <Minus className="w-3 h-3" />
-        </button>
-        <span className="w-6 text-center text-xs font-bold">{c.qty}</span>
-        <button type="button" onClick={() => updateCartQty(c.variant_id, 1)} className="p-1 rounded bg-slate-100 hover:bg-slate-200">
-          <Plus className="w-3 h-3" />
-        </button>
-      </div>
-      <p className="text-xs font-bold text-slate-900 w-20 text-right">{formatRupiah(c.line_total)}</p>
-    </div>
-  ));
-
+const categoryButtons = categories.map((cat) => {
+  const isSelected = selectedCategory === cat.category_id;
+  const btnCls = isSelected
+    ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white'
+    : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700';
   return (
-    <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
-      {/* Kiri: Katalog & Pencarian Barcode */}
-      <div className="lg:col-span-7 space-y-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-            <input type="text" value={search} onChange={handleSearchInput} onKeyDown={handleSearchKeyDown} placeholder="Cari nama produk, SKU, atau scan barcode lalu tekan Enter..." className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          </div>
-          <button type="button" onClick={handleOpenScanner} className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5">
-            <Camera className="w-4 h-4" />
-            <span>Scan</span>
-          </button>
-          {heldCarts.length > 0 && (
-            <button type="button" onClick={() => handleResumeHeld(heldCarts[0].id)} className="px-3 py-2 bg-amber-100 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-1">
-              <PlayCircle className="w-4 h-4" />
-              <span>Resume ({heldCarts.length})</span>
-            </button>
-          )}
-        </div>
+    <button key={cat.category_id} type="button" onClick={() => setSelectedCategory(cat.category_id)} className={btnCls}>
+      {cat.name}
+    </button>
+  );
+});
 
-        {scanFeedback && (
-          <div className={scanFeedback.ok ? 'p-2.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800' : 'p-2.5 rounded-xl text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-800'}>
-            {scanFeedback.text}
+const productCards = filteredItems.map((item) => {
+  const imgUrl = getDriveCdnUrl(item.drive_image_id, 300);
+  return (
+    <button key={item.variant_id} type="button" onClick={() => addToCart(item)} className="bg-white border border-slate-200 hover:border-brand-500 rounded-xl p-3 text-left transition shadow-sm flex flex-col justify-between">
+      <div>
+        {imgUrl ? (
+          <img src={imgUrl} alt={item.product_name} className="w-full h-24 object-cover rounded-lg mb-2 bg-slate-100" />
+        ) : (
+          <div className="w-full h-24 rounded-lg mb-2 bg-slate-100 flex items-center justify-center text-slate-400">
+            <ShoppingBag className="w-7 h-7" />
           </div>
         )}
+        <p className="font-semibold text-xs text-slate-900 line-clamp-2">{item.product_name}</p>
+        <p className="text-[11px] text-slate-500">{item.variant_name} • {item.sku}</p>
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        <span className="font-bold text-xs text-brand-600">{formatRupiah(item.sell_price)}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Stok: {item.stock_qty}</span>
+      </div>
+    </button>
+  );
+});
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <button type="button" onClick={handleSelectAllCat} className={selectedCategory === 'ALL' ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white' : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700'}>
-            Semua
-          </button>
-          {categoryButtons}
+const cartRows = cart.map((c) => (
+  <div key={c.variant_id} className="flex items-center justify-between gap-2 py-2 border-b border-slate-100">
+    <div className="min-w-0 flex-1">
+      <p className="text-xs font-semibold text-slate-900 truncate">{c.product_name_snapshot}</p>
+      <p className="text-[11px] text-slate-500">{formatRupiah(c.unit_price)} x {c.qty}</p>
+    </div>
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={() => updateCartQty(c.variant_id, -1)} className="p-1 rounded bg-slate-100 hover:bg-slate-200">
+        <Minus className="w-3 h-3" />
+      </button>
+      <span className="w-6 text-center text-xs font-bold">{c.qty}</span>
+      <button type="button" onClick={() => updateCartQty(c.variant_id, 1)} className="p-1 rounded bg-slate-100 hover:bg-slate-200">
+        <Plus className="w-3 h-3" />
+      </button>
+    </div>
+    <p className="text-xs font-bold text-slate-900 w-20 text-right">{formatRupiah(c.line_total)}</p>
+  </div>
+));
+
+return (
+  <div className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+    {/* Kiri: Katalog & Pencarian Barcode */}
+    <div className="lg:col-span-7 space-y-3">
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+          <input type="text" value={search} onChange={handleSearchInput} onKeyDown={handleSearchKeyDown} placeholder="Cari nama produk, SKU, atau scan barcode lalu tekan Enter..." className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500" />
         </div>
-
-        {filteredItems.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">
-            Belum ada produk ditemukan. Tambahkan produk di menu Produk & Stok.
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {productCards}
-          </div>
+        <button type="button" onClick={handleOpenScanner} className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5">
+          <Camera className="w-4 h-4" />
+          <span>Scan</span>
+        </button>
+        {heldCarts.length > 0 && (
+          <button type="button" onClick={() => handleResumeHeld(heldCarts[0].id)} className="px-3 py-2 bg-amber-100 text-amber-800 rounded-xl text-xs font-semibold flex items-center gap-1">
+            <PlayCircle className="w-4 h-4" />
+            <span>Resume ({heldCarts.length})</span>
+          </button>
         )}
       </div>
 
-      {/* Kanan: Keranjang & Multi-Payment (Desktop: Kolom Kanan, Mobile/Tablet: Slide-Up Drawer) */}
-      <div className={mobileCartOpen ? 'fixed inset-0 z-40 bg-slate-950/60 flex items-end lg:static lg:bg-transparent lg:col-span-5 lg:block' : 'hidden lg:block lg:col-span-5'}>
-        <div className="bg-white w-full max-h-[88vh] lg:max-h-none overflow-y-auto rounded-t-2xl lg:rounded-2xl border border-slate-200 shadow-xl lg:shadow-sm p-4 flex flex-col justify-between space-y-4">
+      {scanFeedback && (
+        <div className={scanFeedback.ok ? 'p-2.5 rounded-xl text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-800' : 'p-2.5 rounded-xl text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-800'}>
+          {scanFeedback.text}
+        </div>
+      )}
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        <button type="button" onClick={handleSelectAllCat} className={selectedCategory === 'ALL' ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white' : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700'}>
+          Semua
+        </button>
+        {categoryButtons}
+      </div>
+
+      {filteredItems.length === 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-sm text-slate-500">
+          Belum ada produk ditemukan. Tambahkan produk di menu Produk & Stok.
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {productCards}
+        </div>
+      )}
+    </div>
+
+    {/* Kanan: Keranjang & Multi-Payment (Desktop: Kolom Kanan, Mobile/Tablet: Slide-Up Drawer) */}
+    <div className={mobileCartOpen ? 'fixed inset-0 z-40 bg-slate-950/60 flex items-end lg:static lg:bg-transparent lg:col-span-5 lg:block' : 'hidden lg:block lg:col-span-5'}>
+      <div className="bg-white w-full max-h-[88vh] lg:max-h-none overflow-y-auto rounded-t-2xl lg:rounded-2xl border border-slate-200 shadow-xl lg:shadow-sm p-4 flex flex-col justify-between space-y-4">
         <div>
           <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <h2 className="font-bold text-sm text-slate-900">Keranjang Belanja ({totalCartQty})</h2>
@@ -443,91 +444,93 @@ export function PosPage() {
             {processing ? 'Memproses Transaksi...' : 'Bayar & Cetak Struk'}
           </button>
         </div>
-        </div>
       </div>
+    </div>
 
-      {/* Sticky Floating Cart Bar untuk Smartphone & Tablet */}
-      {totalCartQty > 0 && !mobileCartOpen && (
-        <div className="lg:hidden fixed bottom-16 inset-x-3 z-20">
-          <button type="button" onClick={handleOpenMobileCart} className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl shadow-lg flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-semibold">
-              <ShoppingCart className="w-4 h-4" />
-              <span>{totalCartQty} Item di Keranjang</span>
+    {/* Sticky Floating Cart Bar untuk Smartphone & Tablet */}
+    {totalCartQty > 0 && !mobileCartOpen && (
+      <div className="lg:hidden fixed bottom-16 inset-x-3 z-20">
+        <button type="button" onClick={handleOpenMobileCart} className="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 text-white rounded-2xl shadow-lg flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <ShoppingCart className="w-4 h-4" />
+            <span>{totalCartQty} Item di Keranjang</span>
+          </div>
+          <span className="font-extrabold text-sm">{formatRupiah(grandTotal)} • Bayar →</span>
+        </button>
+      </div>
+    )}
+
+    {/* Modal Struk & Fallback WhatsApp */}
+    {receiptModal && (
+      <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-4">
+          <div className="text-center space-y-1">
+            <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
+            <h3 className="font-bold text-lg text-slate-900">Transaksi Berhasil!</h3>
+            <p className="text-xs text-slate-500">No: {receiptModal.tx.tx_id}</p>
+            {receiptModal.offline_saved && (
+              <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg font-medium">
+                Disimpan di Antrian Offline. Akan otomatis sinkron saat internet aktif.
+              </p>
+            )}
+            {receiptModal.tx.sync_status === 'NEEDS_STOCK_REVIEW' && (
+              <p className="text-xs text-rose-700 bg-rose-50 p-2 rounded-lg font-medium flex items-center justify-center gap-1">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Stok minus terdeteksi (NEEDS_STOCK_REVIEW)</span>
+              </p>
+            )}
+          </div>
+
+          <div className="border-y border-dashed border-slate-300 py-3 space-y-1 text-xs">
+            {receiptModal.items.map((it, idx) => (
+              <div key={idx} className="flex justify-between">
+                <span>{it.product_name_snapshot} x{it.qty}</span>
+                <span>{formatRupiah(it.line_total)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between font-bold text-sm pt-2 border-t border-slate-200">
+              <span>Grand Total</span>
+              <span>{formatRupiah(receiptModal.tx.grand_total)}</span>
             </div>
-            <span className="font-extrabold text-sm">{formatRupiah(grandTotal)} • Bayar →</span>
+            <div className="flex justify-between text-emerald-700">
+              <span>Kembalian</span>
+              <span>{formatRupiah(receiptModal.change)}</span>
+            </div>
+          </div>
+
+          {receiptModal.email_result?.fallback_wa && (
+            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+              Invoice email belum terkirim ({receiptModal.email_result.reason}). Gunakan tombol WhatsApp di bawah untuk kirim struk langsung.
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-2">
+            <button type="button" onClick={handlePrintThermal} className="py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+              <Printer className="w-3.5 h-3.5" />
+              <span>Cetak 58mm</span>
+            </button>
+            <button type="button" onClick={handlePrintBluetooth} className="py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+              <Printer className="w-3.5 h-3.5" />
+              <span>Bluetooth</span>
+            </button>
+            <a href={buildInvoiceWaUrl(receiptModal.customer_phone, receiptModal.tx)} target="_blank" rel="noreferrer" className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </a>
+          </div>
+
+          <button type="button" onClick={handleCloseReceipt} className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold">
+            Tutup & Transaksi Baru
           </button>
         </div>
-      )}
+      </div>
+    )}
 
-      {/* Modal Struk & Fallback WhatsApp */}
-      {receiptModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 space-y-4">
-            <div className="text-center space-y-1">
-              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-              <h3 className="font-bold text-lg text-slate-900">Transaksi Berhasil!</h3>
-              <p className="text-xs text-slate-500">No: {receiptModal.tx.tx_id}</p>
-              {receiptModal.offline_saved && (
-                <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg font-medium">
-                  Disimpan di Antrian Offline. Akan otomatis sinkron saat internet aktif.
-                </p>
-              )}
-              {receiptModal.tx.sync_status === 'NEEDS_STOCK_REVIEW' && (
-                <p className="text-xs text-rose-700 bg-rose-50 p-2 rounded-lg font-medium flex items-center justify-center gap-1">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>Stok minus terdeteksi (NEEDS_STOCK_REVIEW)</span>
-                </p>
-              )}
-            </div>
-
-            <div className="border-y border-dashed border-slate-300 py-3 space-y-1 text-xs">
-              {receiptModal.items.map((it, idx) => (
-                <div key={idx} className="flex justify-between">
-                  <span>{it.product_name_snapshot} x{it.qty}</span>
-                  <span>{formatRupiah(it.line_total)}</span>
-                </div>
-              ))}
-              <div className="flex justify-between font-bold text-sm pt-2 border-t border-slate-200">
-                <span>Grand Total</span>
-                <span>{formatRupiah(receiptModal.tx.grand_total)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-700">
-                <span>Kembalian</span>
-                <span>{formatRupiah(receiptModal.change)}</span>
-              </div>
-            </div>
-
-            {receiptModal.email_result?.fallback_wa && (
-              <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
-                Invoice email belum terkirim ({receiptModal.email_result.reason}). Gunakan tombol WhatsApp di bawah untuk kirim struk langsung.
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-2">
-              <button type="button" onClick={handlePrintThermal} className="py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
-                <Printer className="w-3.5 h-3.5" />
-                <span>Cetak 58mm</span>
-              </button>
-              <button type="button" onClick={handlePrintBluetooth} className="py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
-                <Printer className="w-3.5 h-3.5" />
-                <span>Bluetooth</span>
-              </button>
-              <a href={buildInvoiceWaUrl(receiptModal.customer_phone, receiptModal.tx)} target="_blank" rel="noreferrer" className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
-                <MessageCircle className="w-3.5 h-3.5" />
-                <span>WhatsApp</span>
-              </a>
-            </div>
-
-            <button type="button" onClick={handleCloseReceipt} className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold">
-              Tutup & Transaksi Baru
-            </button>
-          </div>
-        </div>
-      )}
-
-      {scannerOpen && (
+    {scannerOpen && (
+      <Suspense fallback={null}>
         <BarcodeScannerModal title="Scan Barcode Penjualan" onDetected={handleBarcodeDetected} onClose={handleCloseScanner} />
-      )}
-    </div>
-  );
+      </Suspense>
+    )}
+  </div>
+);
 }

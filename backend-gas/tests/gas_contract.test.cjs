@@ -459,3 +459,83 @@ test('Fase 6 P0: pos.checkout_batch, shift Blind Close & pos.partial_return', ()
   assert.equal(retRes.ok, true, retRes.error);
   assert.equal(retRes.data.refund_total, 60000);
 });
+
+test('Fase 6 P1 & P2: Rate-Limit Login, Loyalty Points, Transfer Stok & Admin User', () => {
+  const gas = loadGasRuntime();
+  gas.setupKiziyEnvironment();
+
+  // 1. Test Rate-Limit Login (5x gagal -> diblokir)
+  for (let i = 0; i < 5; i++) {
+    const failRes = JSON.parse(gas.doPost({
+      postData: { contents: JSON.stringify({ action: 'auth.login', payload: { username: 'admin', secret: 'wrongpw' } }) }
+    }).getContent());
+    assert.equal(failRes.ok, false);
+  }
+  const blockedRes = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'auth.login', payload: { username: 'admin', secret: 'admin123' } }) }
+  }).getContent());
+  assert.equal(blockedRes.ok, false);
+  assert.ok(blockedRes.error.includes('RATE_LIMITED'));
+
+  // 2. Buat user baru via admin.save_user dan login
+  const custSetup = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'auth.login', payload: { username: 'kasir_baru', secret: '123456' } }) }
+  }).getContent());
+  assert.equal(custSetup.ok, false);
+
+  // Gunakan admin2 untuk test admin & loyalty
+  gas._eval("AdminService.saveUser({ username: 'owner2', full_name: 'Owner 2', password: 'pw2', role_id: 'ROLE_OWNER', outlet_id: 'ALL' })");
+  const owner2Login = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'auth.login', payload: { username: 'owner2', secret: 'pw2' } }) }
+  }).getContent());
+  assert.equal(owner2Login.ok, true, owner2Login.error);
+  const token = owner2Login.data.token;
+
+  // 3. Buat customer + produk, checkout Rp 50.000 -> dapat 5 poin loyalty
+  const custRes = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'crm.save_customer', token, payload: { name: 'Siti', member_tier: 'GOLD' } }) }
+  }).getContent());
+  const customerId = custRes.data.customer_id;
+
+  const prodRes = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'inventory.save_product', token, payload: { name: 'Tas', sku: 'TAS-1', cogs: 25000, sell_price: 50000, initial_stock: 10 } }) }
+  }).getContent());
+  const variantId = prodRes.data.variant.variant_id;
+
+  const coRes = JSON.parse(gas.doPost({
+    postData: {
+      contents: JSON.stringify({
+        action: 'pos.checkout',
+        token,
+        payload: {
+          client_tx_uuid: 'loyalty-tx-1',
+          customer_id: customerId,
+          subtotal: 50000,
+          grand_total: 50000,
+          items: [{ variant_id: variantId, sku: 'TAS-1', product_name_snapshot: 'Tas', qty: 1, unit_price: 50000, cogs_snapshot: 25000, line_total: 50000 }]
+        }
+      })
+    }
+  }).getContent());
+  assert.equal(coRes.ok, true, coRes.error);
+
+  const custList = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'crm.list_customers', token }) }
+  }).getContent());
+  const siti = custList.data.find((c) => c.customer_id === customerId);
+  assert.equal(siti.points_balance, 5);
+
+  // 4. Test Transfer Stok antar outlet
+  const trfRes = JSON.parse(gas.doPost({
+    postData: {
+      contents: JSON.stringify({
+        action: 'inventory.transfer_stock',
+        token,
+        payload: { from_outlet_id: 'OUTLET_MAIN', to_outlet_id: 'OUTLET_CABANG', variant_id: variantId, qty: 3 }
+      })
+    }
+  }).getContent());
+  assert.equal(trfRes.ok, true, trfRes.error);
+  assert.equal(trfRes.data.from_after, 6);
+  assert.equal(trfRes.data.to_after, 3);
+});

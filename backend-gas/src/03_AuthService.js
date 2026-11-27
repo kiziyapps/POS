@@ -13,6 +13,13 @@ const AuthService = {
       throw new Error('Username dan password/PIN wajib diisi.');
     }
 
+    var cache = CacheService.getScriptCache();
+    var failKey = 'KIZIY_LOGIN_FAIL_' + String(username).toLowerCase();
+    var failCount = Number(cache.get(failKey) || 0);
+    if (failCount >= 5) {
+      throw new Error('RATE_LIMITED: Terlalu banyak percobaan login gagal. Coba lagi dalam 5 menit.');
+    }
+
     var orgSs = KiziyUtils.openSpreadsheetByProp(KIZIY_CONFIG.PROP_KEYS.ORG_RBAC_ID);
     var users = KiziyUtils.sheetToObjects(orgSs.getSheetByName('Users'));
     var roles = KiziyUtils.sheetToObjects(orgSs.getSheetByName('Roles_Permissions'));
@@ -33,8 +40,10 @@ const AuthService = {
     }
 
     if (!targetUser) {
+      cache.put(failKey, String(failCount + 1), 300);
       throw new Error('Username atau kredensial tidak valid.');
     }
+    cache.remove(failKey);
 
     var roleObj = roles.find(function (r) { return r.role_id === targetUser.role_id; });
     var permissions = roleObj ? JSON.parse(roleObj.permissions_json || '[]') : [];

@@ -9,6 +9,7 @@ import { TransactionsPage } from './pages/TransactionsPage.jsx';
 import { CrmPromoPage } from './pages/CrmPromoPage.jsx';
 import { ProcurementPage } from './pages/ProcurementPage.jsx';
 import { AnalyticsPage } from './pages/AnalyticsPage.jsx';
+import { AdminUsersPage } from './pages/AdminUsersPage.jsx';
 
 function AppShell() {
   const { session } = useAuth();
@@ -31,6 +32,7 @@ function AppShell() {
       {activeTab === 'CRM' && <CrmPromoPage />}
       {activeTab === 'PROCUREMENT' && <ProcurementPage />}
       {activeTab === 'ANALYTICS' && <AnalyticsPage />}
+      {activeTab === 'ADMIN' && <AdminUsersPage />}
       {shiftModalOpen && <ShiftModal onClose={handleCloseShift} />}
     </div>
   );

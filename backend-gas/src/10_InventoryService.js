@@ -133,5 +133,103 @@ const InventoryService = {
 
       return { balance_key: balanceKey, qty_on_hand: nextQty };
     });
+  },
+
+  /**
+   * Tambah varian baru pada produk yang sudah ada
+   */
+  addVariant: function (session, payload) {
+    if (!payload || !payload.product_id || !payload.sku || !payload.variant_name) {
+      throw new Error('product_id, sku, dan variant_name wajib diisi.');
+    }
+
+    return KiziyUtils.withScriptLock(function () {
+      var catSs = KiziyUtils.openSpreadsheetByProp(KIZIY_CONFIG.PROP_KEYS.CATALOG_ID);
+      var varSheet = catSs.getSheetByName('Product_Variants');
+      var variantId = 'VAR-' + KiziyUtils.uuid().slice(0, 8).toUpperCase();
+      var variantObj = {
+        variant_id: variantId,
+        product_id: payload.product_id,
+        sku: payload.sku,
+        barcode: payload.barcode || payload.sku,
+        variant_name: payload.variant_name,
+        cogs: Number(payload.cogs || 0),
+        sell_price: Number(payload.sell_price || 0),
+        min_stock: Number(payload.min_stock || 5),
+        is_active: true
+      };
+      KiziyUtils.appendObjectRow(varSheet, variantObj);
+
+      var outletId = payload.outlet_id || session.outlet_id || 'OUTLET_MAIN';
+      if (outletId === 'ALL') outletId = 'OUTLET_MAIN';
+      var invSs = KiziyUtils.openSpreadsheetByProp(KIZIY_CONFIG.PROP_KEYS.INVENTORY_MASTER_ID);
+      KiziyUtils.appendObjectRow(invSs.getSheetByName('Stock_Balances'), {
+        balance_key: outletId + '|' + variantId,
+        outlet_id: outletId,
+        variant_id: variantId,
+        qty_on_hand: Number(payload.initial_stock || 0),
+        updated_at: KiziyUtils.nowIso()
+      });
+
+      return variantObj;
+    });
+  },
+
+  /**
+   * Simpan aturan harga grosir / bertingkat (Tier_Prices)
+   */
+  saveTierPrice: function (payload) {
+    if (!payload || !payload.variant_id || !payload.min_qty || !payload.special_price) {
+      throw new Error('variant_id, min_qty, dan special_price wajib diisi.');
+    }
+    return KiziyUtils.withScriptLock(function () {
+      var catSs = KiziyUtils.openSpreadsheetByProp(KIZIY_CONFIG.PROP_KEYS.CATALOG_ID);
+      var obj = {
+        tier_id: 'TIER-' + KiziyUtils.uuid().slice(0, 8).toUpperCase(),
+        variant_id: payload.variant_id,
+        min_qty: Number(payload.min_qty),
+        member_tier: payload.member_tier || 'ALL',
+        special_price: Number(payload.special_price)
+      };
+      KiziyUtils.appendObjectRow(catSs.getSheetByName('Tier_Prices'), obj);
+      return obj;
+    });
+  },
+
+  /**
+   * Simpan konversi multi-satuan (misal 1 Dus = 12 Pcs)
+   */
+  saveUnitConversion: function (payload) {
+    if (!payload || !payload.variant_id || !payload.unit_name || !payload.multiplier_to_base) {
+      throw new Error('variant_id, unit_name, dan multiplier_to_base wajib diisi.');
+    }
+    return KiziyUtils.withScriptLock(function () {
+      var catSs = KiziyUtils.openSpreadsheetByProp(KIZIY_CONFIG.PROP_KEYS.CATALOG_ID);
+      var obj = {
+        conv_id: 'CNV-' + KiziyUtils.uuid().slice(0, 8).toUpperCase(),
+        variant_id: payload.variant_id,
+        unit_name: payload.unit_name,
+        barcode: payload.barcode || '',
+        multiplier_to_base: Number(payload.multiplier_to_base),
+        unit_price: Number(payload.unit_price || 0)
+      };
+      KiziyUtils.appendObjectRow(catSs.getSheetByName('Unit_Conversions'), obj);
+      return obj;
+    });
+  },
+
+  /**
+   * Ambil Kartu Stok (Stock_Ledger) terbaru
+   */
+  getStockLedger: function (variantId, limit) {
+    var active = ShardManager.getActiveShardRecord('STOCK_LEDGER_SHARD', true);
+    if (!active) return [];
+    var ss = SpreadsheetApp.openById(active.spreadsheet_id);
+    var rows = KiziyUtils.sheetToObjects(ss.getSheetByName('Stock_Ledger'));
+    if (variantId) {
+      rows = rows.filter(function (r) { return r.variant_id === variantId; });
+    }
+    rows.reverse();
+    return rows.slice(0, limit || 50);
   }
 };

@@ -1,7 +1,7 @@
 # KIZIY APPS — Blueprint Konsep, Arsitektur & Implementation Plan
 
 > **Status Dokumen:** Living Document (Aktif Diperbarui Setiap Keputusan Diskusi)  
-> **Versi:** v2.1.0 (Fase 6 P0 Selesai — Thermal/WebBluetooth, Shift Blind Close, Batch Sync & Partial Return)  
+> **Versi:** v3.0.0 (Fase 6 Commercial Parity P0, P1 & P2 Selesai 100%)  
 > **Tanggal Pembaruan Terakhir:** 27 November 2026  
 > **Target Brand:** KIZIY APPS (Enterprise-Grade Retail Web POS)
 
@@ -210,4 +210,5 @@ Saat aplikasi siap disosialisasikan, dokumen ini akan diturunkan menjadi 3 paket
 | 26 Nov 2026 | Struktur Repository | Menggunakan **Monorepo** (`/frontend`, `/backend-gas`, `/docs`, `/.github/workflows`). | Menjaga sinkronisasi kontrak API FE–BE & dokumentasi dalam satu repo. |
 | 26 Nov 2026 | Granularitas File & Rollover | **Domain-Grouped** (gabungkan hanya tabel yang ditulis bersamaan dalam 1 transaksi; tabel lain terpisah). Rollover murni kapasitas **200.000 baris** (tanpa rollover bulanan). | Minimalkan latensi `openById()` saat checkout sekaligus menjaga efisiensi kapasitas. |
 | 26 Nov 2026 | Skema Database POS | Disepakati ~31 tabel POS Retail lengkap dalam `DATA_DICTIONARY.md`. | Fase 0 ditutup 100%, siap masuk Fase 1. |
-| 27 Nov 2026 | Scan Barcode Kamera | Penambahan `BarcodeScannerModal` (`html5-qrcode`) untuk input produk baru, pencarian/edit stok, penjualan kasir, dan input Purchase Order. | Mendukung kamera HP/laptop (iOS, Android, Desktop). |
+| 27 Nov 2026 | Scan Barcode Kamera | Penambahan `BarcodeScannerModal` (`html5-qrcode` + Native `BarcodeDetector` + Autofocus/Zoom/Torch) untuk input produk baru, cari/edit stok, penjualan kasir, dan input PO. | Mendukung kamera HP/laptop (iOS, Android, Desktop). |
+| 27 Nov 2026 | Fase 6 Commercial Parity | P0 (Thermal/WebBluetooth, Shift Blind Close, Batch Sync, Partial Return), P1 (Member/Voucher POS, Opname/Kartu Stok/Transfer/Multi-Varian, Admin Staff RBAC), & P2 (Lazy Code Splitting & Login Rate-Limit) selesai. | Seluruh target POS Retail Enterprise terpenuhi. |

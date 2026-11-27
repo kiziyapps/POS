@@ -1,9 +1,9 @@
 import React from 'react';
-import { Wifi, WifiOff, RefreshCw, LogOut, Clock, Store, ShoppingCart, Package, Receipt, BarChart3, Users, Truck } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, LogOut, Clock, Store, ShoppingCart, Package, Receipt, BarChart3, Users, Truck, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 
 export function Navbar({ activeTab, onChangeTab, onOpenShiftModal }) {
-  const { user, activeShift, isOnline, offlineQueueCount, syncing, logout, syncOfflineQueueNow } = useAuth();
+  const { user, activeShift, isOnline, offlineQueueCount, syncing, logout, syncOfflineQueueNow, hasPermission } = useAuth();
   const hasOfflineQueue = offlineQueueCount > 0;
   const onlineBadgeClass = isOnline
     ? 'px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300'
@@ -20,6 +20,9 @@ export function Navbar({ activeTab, onChangeTab, onOpenShiftModal }) {
     { id: 'PROCUREMENT', label: 'PO', icon: Truck },
     { id: 'ANALYTICS', label: 'Analitik', icon: BarChart3 }
   ];
+  if (hasPermission('users.view')) {
+    navItems.push({ id: 'ADMIN', label: 'Staff', icon: ShieldCheck });
+  }
 
   const desktopNavButtons = navItems.map((item) => {
     const Icon = item.icon;

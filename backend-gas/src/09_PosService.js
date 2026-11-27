@@ -188,6 +188,18 @@ const PosService = {
         total_cogs: totalCogs
       });
 
+      // 7. Tambah Poin Loyalty jika customer_id dipilih (1 poin per Rp 10.000)
+      if (txObj.customer_id) {
+        var earnedPoints = Math.floor(txObj.grand_total / 10000);
+        if (earnedPoints > 0) {
+          try {
+            CrmPromoService.addPoints(txObj.customer_id, txId, earnedPoints, 'Belanja ' + txId);
+          } catch (ptErr) {
+            Logger.log('Loyalty points skip: ' + ptErr.message);
+          }
+        }
+      }
+
       return {
         tx: txObj,
         items: itemRowsToInsert,

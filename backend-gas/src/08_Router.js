@@ -101,6 +101,33 @@ function doPost(e) {
         AuthService.requirePermission(session, 'inventory.write');
         return KiziyUtils.jsonResponse(true, InventoryService.adjustStock(session, payload));
 
+      case 'inventory.add_variant':
+        AuthService.requirePermission(session, 'inventory.write');
+        return KiziyUtils.jsonResponse(true, InventoryService.addVariant(session, payload));
+
+      case 'inventory.save_tier_price':
+        AuthService.requirePermission(session, 'inventory.write');
+        return KiziyUtils.jsonResponse(true, InventoryService.saveTierPrice(payload));
+
+      case 'inventory.save_unit_conversion':
+        AuthService.requirePermission(session, 'inventory.write');
+        return KiziyUtils.jsonResponse(true, InventoryService.saveUnitConversion(payload));
+
+      case 'inventory.ledger':
+        return KiziyUtils.jsonResponse(true, InventoryService.getStockLedger(payload.variant_id, payload.limit));
+
+      case 'inventory.transfer_stock':
+        AuthService.requirePermission(session, 'inventory.write');
+        return KiziyUtils.jsonResponse(true, AdminService.transferStock(session, payload));
+
+      case 'admin.list_users':
+        AuthService.requirePermission(session, 'users.view');
+        return KiziyUtils.jsonResponse(true, AdminService.listUsers());
+
+      case 'admin.save_user':
+        AuthService.requirePermission(session, '*');
+        return KiziyUtils.jsonResponse(true, AdminService.saveUser(payload));
+
       case 'crm.list_customers':
         return KiziyUtils.jsonResponse(true, CrmPromoService.listCustomers());
 
@@ -163,7 +190,9 @@ function handleBootstrap_(session) {
     unit_conversions: KiziyUtils.sheetToObjects(catSs.getSheetByName('Unit_Conversions')),
     tier_prices: KiziyUtils.sheetToObjects(catSs.getSheetByName('Tier_Prices')),
     stock_balances: KiziyUtils.sheetToObjects(invSs.getSheetByName('Stock_Balances')),
-    promos: KiziyUtils.sheetToObjects(crmSs.getSheetByName('Promos'))
+    customers: KiziyUtils.sheetToObjects(crmSs.getSheetByName('Customers')),
+    promos: KiziyUtils.sheetToObjects(crmSs.getSheetByName('Promos')),
+    vouchers: KiziyUtils.sheetToObjects(crmSs.getSheetByName('Vouchers'))
   };
 }
 
