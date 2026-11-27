@@ -198,6 +198,20 @@ const PosService = {
   },
 
   /**
+   * Batch Checkout untuk sinkronisasi cepat antrian offline (mengurangi overhead openById)
+   */
+  checkoutBatch: function (session, txPayloads) {
+    if (!txPayloads || !Array.isArray(txPayloads) || txPayloads.length === 0) {
+      return { synced: 0, results: [] };
+    }
+    var results = [];
+    for (var i = 0; i < txPayloads.length; i++) {
+      results.push(PosService.checkout(session, txPayloads[i]));
+    }
+    return { synced: results.length, results: results };
+  },
+
+  /**
    * Void transaksi (termasuk transaksi lampau) + kembalikan stok + re-sync Daily_Summary
    */
   voidTransaction: function (session, txId, reason) {

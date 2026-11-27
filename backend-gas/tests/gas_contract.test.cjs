@@ -371,3 +371,91 @@ test('ShardManager auto-rollover @ 200.000 rows & cross-shard void re-sync', () 
   assert.equal(voidRes.ok, true, voidRes.error);
   assert.equal(voidRes.data.daily_summary.net_sales, 200000);
 });
+
+test('Fase 6 P0: pos.checkout_batch, shift Blind Close & pos.partial_return', () => {
+  const gas = loadGasRuntime();
+  gas.setupKiziyEnvironment();
+
+  const loginRes = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'auth.login', payload: { username: 'admin', secret: 'admin123' } }) }
+  }).getContent());
+  const token = loginRes.data.token;
+
+  const prodRes = JSON.parse(gas.doPost({
+    postData: {
+      contents: JSON.stringify({
+        action: 'inventory.save_product',
+        token,
+        payload: { name: 'Kaos Polos', sku: 'KP-01', cogs: 30000, sell_price: 60000, initial_stock: 20 }
+      })
+    }
+  }).getContent());
+  const variantId = prodRes.data.variant.variant_id;
+
+  // 1. Open Shift (opening_cash: 500000) & Petty Cash Out (50000)
+  const shiftOpen = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'shift.open', token, payload: { shift_id: 'SHF-TEST-1', opening_cash: 500000 } }) }
+  }).getContent());
+  assert.equal(shiftOpen.ok, true, shiftOpen.error);
+
+  const cashOut = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'shift.cash_movement', token, payload: { shift_id: 'SHF-TEST-1', type: 'OUT', amount: 50000, reason: 'Plastik' } }) }
+  }).getContent());
+  assert.equal(cashOut.ok, true, cashOut.error);
+
+  // 2. Batch Checkout 2 transaksi tunai (masing-masing 60000 = 120000)
+  const batchRes = JSON.parse(gas.doPost({
+    postData: {
+      contents: JSON.stringify({
+        action: 'pos.checkout_batch',
+        token,
+        payload: {
+          transactions: [
+            {
+              client_tx_uuid: 'batch-1',
+              shift_id: 'SHF-TEST-1',
+              subtotal: 60000,
+              grand_total: 60000,
+              items: [{ variant_id: variantId, sku: 'KP-01', product_name_snapshot: 'Kaos Polos', qty: 1, unit_price: 60000, cogs_snapshot: 30000, line_total: 60000 }]
+            },
+            {
+              client_tx_uuid: 'batch-2',
+              shift_id: 'SHF-TEST-1',
+              subtotal: 60000,
+              grand_total: 60000,
+              items: [{ variant_id: variantId, sku: 'KP-01', product_name_snapshot: 'Kaos Polos', qty: 1, unit_price: 60000, cogs_snapshot: 30000, line_total: 60000 }]
+            }
+          ]
+        }
+      })
+    }
+  }).getContent());
+  assert.equal(batchRes.ok, true, batchRes.error);
+  assert.equal(batchRes.data.synced, 2);
+
+  // 3. Blind Close Shift (expected = 500000 + 120000 - 50000 = 570000; actual = 565000 -> variance = -5000)
+  const closeRes = JSON.parse(gas.doPost({
+    postData: { contents: JSON.stringify({ action: 'shift.close', token, payload: { shift_id: 'SHF-TEST-1', actual_cash: 565000 } }) }
+  }).getContent());
+  assert.equal(closeRes.ok, true, closeRes.error);
+  assert.equal(closeRes.data.expected_cash, 570000);
+  assert.equal(closeRes.data.variance, -5000);
+
+  // 4. Partial Return pada transaksi pertama -> restock 1 & re-sync Daily_Summary
+  const tx1Id = batchRes.data.results[0].tx.tx_id;
+  const retRes = JSON.parse(gas.doPost({
+    postData: {
+      contents: JSON.stringify({
+        action: 'pos.partial_return',
+        token,
+        payload: {
+          tx_id: tx1Id,
+          reason: 'Salah warna',
+          items: [{ variant_id: variantId, qty_returned: 1, refund_amount: 60000, restock_flag: true }]
+        }
+      })
+    }
+  }).getContent());
+  assert.equal(retRes.ok, true, retRes.error);
+  assert.equal(retRes.data.refund_total, 60000);
+});

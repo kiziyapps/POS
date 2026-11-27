@@ -66,6 +66,26 @@ function doPost(e) {
         AuthService.requirePermission(session, 'pos.checkout');
         return KiziyUtils.jsonResponse(true, PosService.checkout(session, payload));
 
+      case 'pos.checkout_batch':
+        AuthService.requirePermission(session, 'pos.checkout');
+        return KiziyUtils.jsonResponse(true, PosService.checkoutBatch(session, payload.transactions));
+
+      case 'pos.partial_return':
+        AuthService.requirePermission(session, 'void.manage');
+        return KiziyUtils.jsonResponse(true, ShiftReturnService.partialReturn(session, payload));
+
+      case 'shift.open':
+        AuthService.requirePermission(session, 'shift.manage');
+        return KiziyUtils.jsonResponse(true, ShiftReturnService.openShift(session, payload));
+
+      case 'shift.cash_movement':
+        AuthService.requirePermission(session, 'shift.manage');
+        return KiziyUtils.jsonResponse(true, ShiftReturnService.recordCashMovement(session, payload));
+
+      case 'shift.close':
+        AuthService.requirePermission(session, 'shift.manage');
+        return KiziyUtils.jsonResponse(true, ShiftReturnService.closeShift(session, payload));
+
       case 'pos.void':
         AuthService.requirePermission(session, 'void.manage');
         return KiziyUtils.jsonResponse(true, PosService.voidTransaction(session, payload.tx_id, payload.reason));

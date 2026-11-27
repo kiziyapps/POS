@@ -41,10 +41,17 @@ export function AuthProvider({ children }) {
       const queue = await offlineDb.getOfflineQueue();
       queue.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
 
-      for (const item of queue) {
-        await callGasApi('pos.checkout', item, session.token);
-        await offlineDb.removeOfflineTx(item.client_tx_uuid);
-        syncedCount += 1;
+      if (queue.length > 1) {
+        await callGasApi('pos.checkout_batch', { transactions: queue }, session.token);
+        for (const item of queue) {
+          await offlineDb.removeOfflineTx(item.client_tx_uuid);
+        }
+        syncedCount = queue.length;
+        await refreshQueueCount();
+      } else if (queue.length === 1) {
+        await callGasApi('pos.checkout', queue[0], session.token);
+        await offlineDb.removeOfflineTx(queue[0].client_tx_uuid);
+        syncedCount = 1;
         await refreshQueueCount();
       }
 
@@ -183,14 +190,33 @@ export function AuthProvider({ children }) {
       opened_at: new Date().toISOString(),
       status: 'OPEN'
     };
+    if (navigator.onLine && session?.token) {
+      try {
+        await callGasApi('shift.open', shiftObj, session.token);
+      } catch (err) {
+        console.warn('Shift open sync warning:', err.message);
+      }
+    }
     await offlineDb.saveActiveShift(shiftObj);
     setActiveShift(shiftObj);
     return shiftObj;
   };
 
-  const closeShift = async () => {
+  const closeShift = async (actualCash) => {
+    let closeResult = null;
+    if (activeShift && navigator.onLine && session?.token) {
+      try {
+        closeResult = await callGasApi('shift.close', {
+          shift_id: activeShift.shift_id,
+          actual_cash: Number(actualCash || 0)
+        }, session.token);
+      } catch (err) {
+        console.warn('Shift close sync warning:', err.message);
+      }
+    }
     await offlineDb.clearActiveShift();
     setActiveShift(null);
+    return closeResult;
   };
 
   const hasPermission = (perm) => {

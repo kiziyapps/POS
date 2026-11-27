@@ -1,8 +1,8 @@
 # KIZIY APPS — Blueprint Konsep, Arsitektur & Implementation Plan
 
 > **Status Dokumen:** Living Document (Aktif Diperbarui Setiap Keputusan Diskusi)  
-> **Versi:** v2.0.0 (Seluruh Fase 0–5 Selesai — Siap Deployment & Sosialisasi)  
-> **Tanggal Pembaruan Terakhir:** 26 November 2026  
+> **Versi:** v2.1.0 (Fase 6 P0 Selesai — Thermal/WebBluetooth, Shift Blind Close, Batch Sync & Partial Return)  
+> **Tanggal Pembaruan Terakhir:** 27 November 2026  
 > **Target Brand:** KIZIY APPS (Enterprise-Grade Retail Web POS)
 
 ---

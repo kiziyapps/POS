@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { RefreshCw, Ban, MessageCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Ban, MessageCircle, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useAuth } from '../store/AuthContext.jsx';
 import { callGasApi } from '../services/gasClient.mjs';
 import { offlineDb } from '../services/offlineDb.mjs';
@@ -68,6 +68,25 @@ export function TransactionsPage() {
     }
   };
 
+  const handlePartialReturn = async (tx) => {
+    const refundAmt = window.prompt(`Masukkan nominal refund retur sebagian untuk ${tx.tx_id}:`, String(tx.grand_total));
+    if (!refundAmt) return;
+    const reason = window.prompt('Alasan retur:', 'Tukar / Retur Barang') || 'Retur Pelanggan';
+    try {
+      setLoading(true);
+      await callGasApi('pos.partial_return', {
+        tx_id: tx.tx_id,
+        reason,
+        items: [{ variant_id: '', qty_returned: 1, refund_amount: Number(refundAmt), restock_flag: false }]
+      }, session.token);
+      await loadData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -127,10 +146,16 @@ export function TransactionsPage() {
                     <span>WA</span>
                   </a>
                   {t.tx_status !== 'VOID' && hasPermission('void.manage') && (
-                    <button type="button" onClick={() => handleVoid(t.tx_id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold">
-                      <Ban className="w-3.5 h-3.5" />
-                      <span>Void</span>
-                    </button>
+                    <>
+                      <button type="button" onClick={() => handlePartialReturn(t)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-50 text-amber-800 hover:bg-amber-100 font-semibold">
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Retur</span>
+                      </button>
+                      <button type="button" onClick={() => handleVoid(t.tx_id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-50 text-rose-700 hover:bg-rose-100 font-semibold">
+                        <Ban className="w-3.5 h-3.5" />
+                        <span>Void</span>
+                      </button>
+                    </>
                   )}
                 </td>
               </tr>

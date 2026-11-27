@@ -3,6 +3,7 @@ import { Search, ShoppingBag, Trash2, Plus, Minus, PauseCircle, PlayCircle, Prin
 import { useAuth } from '../store/AuthContext.jsx';
 import { generateOfflineReceiptNo } from '../services/gasClient.mjs';
 import { buildInvoiceWaUrl } from '../services/whatsapp.mjs';
+import { printBluetoothEscPos, printBrowserThermal } from '../services/thermalPrinter.mjs';
 import { getDeviceId } from '../config/env.mjs';
 import { formatRupiah, getDriveCdnUrl, resolveVariantPrice } from '../utils/pricing.mjs';
 import { BarcodeScannerModal } from '../components/BarcodeScannerModal.jsx';
@@ -223,7 +224,17 @@ export function PosPage() {
   const handleEmailInput = (e) => setCustomerEmail(e.target.value);
   const handlePhoneInput = (e) => setCustomerPhone(e.target.value);
   const handleCloseReceipt = () => setReceiptModal(null);
-  const handlePrintReceipt = () => window.print();
+  const handlePrintThermal = () => {
+    if (receiptModal) printBrowserThermal(receiptModal);
+  };
+  const handlePrintBluetooth = async () => {
+    if (!receiptModal) return;
+    try {
+      await printBluetoothEscPos(receiptModal);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
   const handleOpenScanner = () => setScannerOpen(true);
   const handleCloseScanner = () => setScannerOpen(false);
   const handleOpenMobileCart = () => setMobileCartOpen(true);
@@ -492,14 +503,18 @@ export function PosPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={handlePrintReceipt} className="py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5">
-                <Printer className="w-4 h-4" />
-                <span>Cetak Struk</span>
+            <div className="grid grid-cols-3 gap-2">
+              <button type="button" onClick={handlePrintThermal} className="py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak 58mm</span>
               </button>
-              <a href={buildInvoiceWaUrl(receiptModal.customer_phone, receiptModal.tx)} target="_blank" rel="noreferrer" className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5">
-                <MessageCircle className="w-4 h-4" />
-                <span>Kirim WhatsApp</span>
+              <button type="button" onClick={handlePrintBluetooth} className="py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+                <Printer className="w-3.5 h-3.5" />
+                <span>Bluetooth</span>
+              </button>
+              <a href={buildInvoiceWaUrl(receiptModal.customer_phone, receiptModal.tx)} target="_blank" rel="noreferrer" className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1">
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>WhatsApp</span>
               </a>
             </div>
 
